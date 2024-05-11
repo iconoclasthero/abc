@@ -1,0 +1,65 @@
+#!/bin/bash
+
+editscript(){
+  local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"; [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit; printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
+
+pause(){ read -rp "$*" ; }
+
+[[ "$1" == @(edit|e|-e) ]] && editscript
+
+#!/bin/bash
+
+source ~/.config/abc.conf
+
+# Construct the full API URL
+abs_endpoint="/api/libraries"
+abs_url="${abs_server}${abs_endpoint}"
+
+# Make API request and store response in a variable
+abs_response=$(curl -s -H "Authorization: Bearer $abstoken" "$abs_url")
+
+# Check if the API response is empty or an error occurred
+if [ -z "$abs_response" ]; then
+    echo "Error: Failed to retrieve data from the API endpoint."
+    exit 1
+fi
+
+# Extract library names and library UUIDs from the JSON response
+mapfile -t library_names < <(echo "$abs_response" | jq -r '.libraries[].name')
+mapfile -t library_uuids < <(echo "$abs_response" | jq -r '.libraries[].id')
+#library_names=( $(echo "$abs_response" | jq -r '.libraries[].name') )
+#library_uuids=( $(echo "$abs_response" | jq -r '.libraries[].id') )
+# Create an associative array with UUIDs as keys and names as values
+declare -A temp_map_name
+for ((i = 0; i < ${#library_uuids[@]}; i++)); do
+    temp_map_name["${library_names[i]}"]="${library_uuids[i]}"
+done
+
+#sorted_names=($(printf '%s\n' "${!temp_map_name[@]}" | sort))
+
+
+mapfile -t sorted_names < <(
+    for name in "${!temp_map_name[@]}"; do
+        echo "$name"
+    done | sort
+)
+
+
+declare -A library_map_name
+#for name in "${sorted_names[@]}"; do
+
+for ((i=0; i<"${#sorted_names[@]}"; i++)); do
+ name="${sorted_names[$i]}"
+ library_map_name["$name"]="${temp_map_name[$name]}"
+done
+
+readarray -t selections < <(for name in "${sorted_names[@]}"; do    echo "${library_map_name[$name]} -- $name"; done)
+clear -x
+selected=$(gum choose "${selections[@]}"\
+                          --height "$(( "$(tput lines)" - 10 ))" \
+                          --cursor.bold \
+                          --item.foreground="7" \
+                          --cursor "* " \
+                          --cursor.foreground="1")
+
+printf uuid\:\ %s\\n "${selected% -- *}"

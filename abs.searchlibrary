@@ -1,0 +1,229 @@
+#!/bin/bash
+#curl "https://abs.example.com/api/libraries/lib_c1u6t4p45c35rf0nzd/search?q=Terry%20Goodkind" \
+#  -H "Authorization: Bearer exJhbGciOiJI6IkpXVCJ9.eyJ1c2Vyi5NDEyODc4fQ.ZraBFohS4Tg39NszY"
+
+editscript(){
+  local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"; [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit; printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
+
+pause(){ read -rp "$*" ; }
+
+percent_encode() {
+    jq -rn --arg str "$1" '$str | @uri'
+}
+
+# Function to display book details
+display_book() {
+    echo "Title: ${title}: ${subtitle}"
+    echo "Authors:"
+    for ((j = 0; j < author_count; j++)); do
+        echo "- $(echo "$book" | jq -r ".authors[$j].name")"
+    done
+    echo "Narrator: ${narrator}"
+    echo "Published Year: ${published_year}"
+    echo "Publisher: ${publisher}"
+    echo "Description: ${description}"
+    echo "ASIN: ${asin}"
+    echo "Series: ${series}"
+    echo "Genres: ${genres}"
+    echo "Cover Image: ${cover_image}"
+}
+
+
+[[ "$1" == @(edit|e|-e) ]] && editscript
+
+delimiter=$'\001'
+source ~/.config/abc.conf
+libid=$(abs.getlibraries)
+query=$(percent_encode "$1")
+# Construct the full API URL4
+libid="${libid#* }"
+abs_endpoint="/api/libraries/$libid/search/?q=$query"
+abs_url="$abs_server$abs_endpoint"
+# Make API request and store response in a variable
+abs_response=$(curl -sS "$abs_server$abs_endpoint" -H "Authorization: Bearer $abstoken" )
+# Check if the API response is empty or an error occurred
+if [ -z "$abs_response" ]; then
+    echo "Error: Failed to retrieve data from the API endpoint."
+    exit 1
+fi
+#set -x
+#trap DEBUG
+# Parse JSON response
+book_count=$(echo "$abs_response" | jq '.book | length')
+# Check if there are any books found
+if [ "$book_count" -eq 0 ]; then
+    echo "No books found."
+    exit 0
+fi
+
+# Loop through each book
+for ((i=0; i<book_count; i++)); do
+    book=$(echo "$abs_response" | jq ".book[$i].libraryItem.media.metadata")
+    title=$(echo "$book" | jq -r '.title')
+    subtitle=$(echo "$book" | jq -r '.subtitle')
+    author_count=$(echo "$book" | jq '.authors | length')
+    narrator=$(echo "$book" | jq -r '.narratorName')
+    published_year=$(echo "$book" | jq -r '.publishedYear')
+    publisher=$(echo "$book" | jq -r '.publisher')
+    description=$(echo "$book" | jq -r '.description')
+    asin=$(echo "$book" | jq -r '.asin')
+    series=$(echo "$book" | jq -r '.series[0].name')
+    genres=$(echo "$book" | jq -r '.genres | join(", ")')
+#    cover_image=$(echo "$abs_response" | jq -r ".book[$i].libraryItem.media.coverPath")
+    libraryItemId=$(echo "$abs_response" | jq -r '.book[0].libraryItem.id')
+
+    # Display book details
+#    display_book
+    # Add authors to the array
+    for ((j = 0; j < author_count; j++)); do
+        authors+=("$(echo "$book" | jq -r ".authors[$j].name")")
+    done
+    # Add title with subtitle to the array
+    title_subtitles+=("${title}${delimiter}: ${subtitle}")
+    titles+=("${title}")
+    subtitles+=("${subtitle}")
+    itemids+=( "${libraryItemId}" )
+
+   declare -A title_id
+   declare -A id_title
+    for ((k = 0; k < ${#itemids[@]}; k++)); do
+      title_id["${titles[i]}"]="${itemids[i]}"
+      id_title["${itemids[i]}"]="${titles[i]}"
+    done
+ #   pause "${itemids[@]}"
+ #   pause "${titles[@]}"
+    # Prompt user to move to the next book
+#    read -rp "Press any key to move to the next book..."
+
+    # Clear the screen for the next book
+#    clear
+done
+#pause "$(printf "${title_subtitles[@]}")"
+[[ "$(gum choose "titles" "subtitles")" = titles ]] && query="$(gum choose "${title_subtitles[@]}")"
+query="$(percent_encode "${query%$'\001'*}" )"
+abs_endpoint="/api/libraries/$libid/search/?q=$query"
+title_response=$(curl -sS "$abs_server$abs_endpoint" -H "Authorization: Bearer $abstoken" )
+
+
+# Parse JSON response
+title_count=$(echo "$title_response" | jq '.book | length')
+
+# Check if there are any books found
+if [ "$title_count" -eq 0 ]; then
+    echo "No books found."
+    exit 0
+fi
+
+# Loop through each book
+for ((i = 0; i < title_count; i++)); do
+    book=$(echo "$title_response" | jq ".book[$i].libraryItem.media.metadata")
+    title=$(echo "$book" | jq -r '.title')
+    subtitle=$(echo "$book" | jq -r '.subtitle')
+    author_count=$(echo "$book" | jq '.authors | length')
+    narrator=$(echo "$book" | jq -r '.narratorName')
+    published_year=$(echo "$book" | jq -r '.publishedYear')
+    publisher=$(echo "$book" | jq -r '.publisher')
+    description=$(echo "$book" | jq -r '.description')
+    asin=$(echo "$book" | jq -r '.asin')
+    series=$(echo "$book" | jq -r '.series[0].name')
+    genres=$(echo "$book" | jq -r '.genres | join(", ")')
+    cover_image=$(echo "$abs_response" | jq -r ".book[$i].libraryItem.media.coverPath")
+
+    # Display book details
+    display_book
+
+    # Add authors to the array
+    for ((j = 0; j < author_count; j++)); do
+        authors+=("$(echo "$book" | jq -r ".authors[$j].name")")
+    done
+
+    # Add title with subtitle to the array
+    titles+=("${title}: ${subtitle}")
+
+    # Prompt user to move to the next book
+#    read -rp "Press any key to move to the next book..."
+
+    # Clear the screen for the next book
+#    clear
+done
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+exit
+mapfile -t library_names < <(echo "$abs_response" | jq -r '.libraries[].name')
+mapfile -t library_uuids < <(echo "$abs_response" | jq -r '.libraries[].id')
+#library_names=( $(echo "$abs_response" | jq -r '.libraries[].name') )
+#library_uuids=( $(echo "$abs_response" | jq -r '.libraries[].id') )
+# Create an associative array with UUIDs as keys and names as values
+declare -A temp_map_name
+for ((i = 0; i < ${#library_uuids[@]}; i++)); do
+    temp_map_name["${library_names[i]}"]="${library_uuids[i]}"
+done
+
+#sorted_names=($(printf '%s\n' "${!temp_map_name[@]}" | sort))
+
+
+mapfile -t sorted_names < <(
+    for name in "${!temp_map_name[@]}"; do
+        echo "$name"
+    done | sort
+)
+
+
+declare -A library_map_name
+#for name in "${sorted_names[@]}"; do
+
+for ((i=0; i<"${#sorted_names[@]}"; i++)); do
+ name="${sorted_names[$i]}"
+ library_map_name["$name"]="${temp_map_name[$name]}"
+done
+
+echo "Library Names and UUIDs (Sorted by Names):"
+readarray -t selections < <(for name in "${sorted_names[@]}"; do    echo "${library_map_name[$name]} -- $name"; echo; done)
+clear -x
+selected=$(gum choose "${selections[@]}"\
+                          --height "$(( "$(tput lines)" - 10 ))" \
+                          --cursor.bold \
+                          --item.foreground="7" \
+                          --cursor "* " \
+                          --cursor.foreground="1")
+
+echo "${selected[@]}"
