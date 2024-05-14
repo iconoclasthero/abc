@@ -1,0 +1,37 @@
+#!/bin/bash
+# nb: the swp file that editscript relies on is provided by nano
+
+. "$HOME"/.config/abc.conf
+
+editscript(){
+  local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"
+     [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit
+     printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
+
+pause(){ read -rp "$*" ; }
+
+[[ "$1" == @(edit|e|-e) ]] && editscript
+
+abs_response=$(curl -s "$abs_server/api/users" \
+  -H "Authorization: Bearer $abs_token")
+
+# Check if the response contains any data
+if [[ -n "$abs_response" ]]; then
+
+  # Parse the JSON using jq and iterate over each user
+  jq -c '.users[]' <<< "$abs_response" | while IFS= read -r user; do
+    id=$(jq -r '.id' <<< "$user")
+    username=$(jq -r '.username' <<< "$user")
+    type=$(jq -r '.type' <<< "$user")
+    isActive=$(jq -r '.isActive' <<< "$user")
+
+    # Print user details
+    echo "User ID: $id"
+    echo "Username: $username"
+    echo "Type: $type"
+    echo "Active: $isActive"
+    echo "---------------------------------"
+  done
+else
+  echo "Error: Empty response from server"
+fi

@@ -66,7 +66,7 @@ display_book_color() {
 }
 
 
-[[ ! "$1" ]] && printf '\nPlease provide some motherfuckin'\'' search terms! exit (1)\n\n' && exit 1
+#[[ ! "$1" ]] && printf '\nPlease provide some motherfuckin'\'' search terms! exit (1)\n\n' && exit 1
 
 [[ "$1" == @(edit|e|-e) ]] && editscript
 
@@ -79,7 +79,7 @@ libid="${libid#* }"
 
 gettitles(){
 
-abs_endpoint="/api/libraries/$libid/search/?q=$query&limit=120"
+abs_endpoint="/api/libraries/$libid/search/?q=$query"
 abs_url="$abs_server$abs_endpoint"
 # Make API request and store response in a variable
 abs_response=$(curl -sS "$abs_server$abs_endpoint" -H "Authorization: Bearer $abstoken" )
@@ -93,9 +93,7 @@ fi
 #trap DEBUG
 # Parse JSON response
 book_count=$(echo "$abs_response" | jq '.book | length')
-
 pause "Result: $book_count Books"
-
 #pause "$(echo "$abs_response" | jq |grep -C 8 -i "libraryItemId")"
 #pause "$(echo "$abs_response") # | jq |grep -C 8 -i "libraryItemId")"
 # Check if there are any books found
@@ -110,36 +108,112 @@ for ((i=0; i<book_count; i++)); do
     title=$(echo "$book" | jq -r '.title')
     subtitle=$(echo "$book" | jq -r '.subtitle')
     author_count=$(echo "$book" | jq '.authors | length')
-##    narrator=$(echo "$book" | jq -r '.narratorName')
+    narrator=$(echo "$book" | jq -r '.narratorName')
     published_year=$(echo "$book" | jq -r '.publishedYear')
-##    publisher=$(echo "$book" | jq -r '.publisher')
-##    description=$(echo "$book" | jq -r '.description')
+    publisher=$(echo "$book" | jq -r '.publisher')
+    description=$(echo "$book" | jq -r '.description')
     asin=$(echo "$book" | jq -r '.asin')
     series=$(echo "$book" | jq -r '.series[0].name')
-##    genres=$(echo "$book" | jq -r '.genres | join(", ")')
-##    cover_image=$(echo "$abs_response" | jq -r ".book[$i].libraryItem.media.coverPath")
+    genres=$(echo "$book" | jq -r '.genres | join(", ")')
+#    cover_image=$(echo "$abs_response" | jq -r ".book[$i].libraryItem.media.coverPath")
  libraryItemId=$(echo "$abs_response" | jq -r ".book[$i].libraryItem.media.libraryItemId")
+#   libraryItemId=$(echo "$abs_response" | jq -r '.book[0].libraryItem.id')
+#    pause "$libraryItemId"
     audio_directory=$(echo "$book" | jq -r '.path'); audio_directory="${audio_directory%\/*}"
 
+    # Display book details
+#    display_book
     # Add authors to the array
     for ((j = 0; j < author_count; j++)); do
         authors+=("$(echo "$book" | jq -r ".authors[$j].name")")
     done
     # Add title with subtitle to the array
-
-#arrays:
     title_subtitles+=("${title}${delimiter}: ${subtitle}")
     titles+=("${title}")
     subtitles+=("${subtitle}")
     itemids+=( "${libraryItemId}" )
-    title_id["${titles[$i]}"]="${itemids[$i]}"
-    id_title["${itemids[i]}"]="${titles[i]}"
+
+
+#   declare -A title_id
+#   declare -A id_title
+
+#    for ((k = 0; k < ${#itemids[@]}; k++)); do
+#      title_id["${titles[k]}"]="${itemids[k]}"
+#pause "hi ${title_id[${titles[k]}]}"
+#      id_title["${itemids[k]}"]="${titles[k]}"
+#    done
+#echo "${titles[i]} ${itemids[$i]}"
+      title_id["${titles[$i]}"]="${itemids[$i]}"
+      id_title["${itemids[i]}"]="${titles[i]}"
+#    done
 
 done
 }
 
 #arrays must be declared outside of functions to be global
 
+abs_endpoint="/api/libraries/"$libid"/stats"
+
+response="$(curl "$abs_server$abs_endpoint"   -H "Authorization: Bearer $abs_token")"
+
+#!/bin/bash
+
+# Define color and formatting variables
+red=$(tput setaf 1)
+bold=$(tput bold)
+tput0=$(tput sgr0)
+
+# Make API call and store JSON response
+
+# Parse JSON response
+totalItems=$(echo "$response" | jq -r '.totalItems')
+totalAuthors=$(echo "$response" | jq -r '.totalAuthors')
+totalGenres=$(echo "$response" | jq -r '.totalGenres')
+totalDuration=$(echo "$response" | jq -r '.totalDuration')
+numAudioTrack=$(echo "$response" | jq -r '.numAudioTrack')
+totalSize=$(echo "$response" | jq -r '.totalSize')
+
+# Print results with formatting
+echo "${bold}${red}Library Stats:${tput0}"
+echo "Total Items: ${bold}$totalItems${tput0}"
+echo "Total Authors: ${bold}$totalAuthors${tput0}"
+echo "Total Genres: ${bold}$totalGenres${tput0}"
+echo "Total Duration: ${bold}$totalDuration seconds${tput0}"
+echo "Number of Audio Tracks: ${bold}$numAudioTrack${tput0}"
+echo "Total Size: ${bold}$totalSize bytes${tput0}"
+
+# Print longest items
+echo "${bold}${red}Longest Items:${tput0}"
+longestItems=$(echo "$response" | jq -r '.longestItems[] | "\(.title): \(.duration) seconds"')
+echo "$longestItems" | while read -r item; do
+    echo "${bold}$item${tput0}"
+done
+
+# Print largest items
+echo "${bold}${red}Largest Items:${tput0}"
+largestItems=$(echo "$response" | jq -r '.largestItems[] | "\(.title): \(.size) bytes"')
+echo "$largestItems" | while read -r item; do
+    echo "${bold}$item${tput0}"
+done
+
+# Print authors with count
+echo "${bold}${red}Authors:${tput0}"
+authors=$(echo "$response" | jq -r '.authorsWithCount[] | "\(.name): \(.count) books"')
+echo "$authors" | while read -r author; do
+    echo "${bold}$author${tput0}"
+done
+
+# Print genres with count
+echo "${bold}${red}Genres:${tput0}"
+genres=$(echo "$response" | jq -r '.genresWithCount[] | "\(.genre): \(.count) items"')
+echo "$genres" | while read -r genre; do
+    echo "${bold}$genre${tput0}"
+done
+
+
+
+
+exit
 declare -A title_id
 declare -A id_title
 
@@ -160,12 +234,6 @@ abs_endpoint="/api/items/$query?expanded=1&include=progress,authors"
 
 title_response=$(curl -sS "$abs_server$abs_endpoint" -H "Authorization: Bearer $abstoken" )
 
-pause x
-pause "$(echo $title_response|grep -i --color=always Series)"
-pause x
-
-
-
 # Parse JSON response
 title_count=$(echo "$title_response" | jq '.libraryFiles | length')
 title_count=$(echo "$title_response" | jq '. | if .id then 1 else 0 end')
@@ -176,7 +244,8 @@ if [ "$title_count" -eq 0 ]; then
     exit 0
 fi
 
-unset title authors author_count authors authors narrator published_year publisher description asin series genres cover_image audio_directory user_media_progress
+unset authors
+unset author_count
 
     # Parse JSON data
     title=$(echo "$title_response" | jq -r '.media.metadata.title')
@@ -194,7 +263,7 @@ unset title authors author_count authors authors narrator published_year publish
     publisher=$(echo "$title_response" | jq -r '.media.metadata.publisher')
     description=$(echo "$title_response" | jq -r '.media.metadata.description')
     asin=$(echo "$title_response" | jq -r '.media.metadata.asin')
-    series=$(echo "$title_response" | jq -r '.media.metadata.series[0]' )
+    series=$(echo "$title_response" | jq -r '.media.metadata.series[0]')
     genres=$(echo "$title_response" | jq -r '.media.metadata.genres | join(", ")')
     cover_image=$(echo "$title_response" | jq -r '.media.coverPath')
     audio_directory=$(echo "$title_response" | jq -r '.media.audioFiles[0].metadata.path | split("/") | .[:-1] | join("/")')
@@ -203,6 +272,8 @@ unset title authors author_count authors authors narrator published_year publish
 #user_media_progress=$(echo "$title_response" | jq -r --arg user "$abs_user" '.userMediaProgress | select(.user == $abs_user)')
 user_media_progress=$(echo "$title_response" | jq -r '.userMediaProgress')
 
+pause "$(echo "$user_media_progress"|jq)"
+pause "$(echo "$title_response"|jq)"
 if [ -n "$user_media_progress" ]; then
     # Parse the specific fields for the user progress
     user_duration=$(echo "$user_media_progress" | jq -r '.durations')
@@ -241,6 +312,5 @@ if [[ "$titdisplaychoice" = @(Book\ Directory|Title) ]]; then
 fi
 
 
-display_book_color
 
 exit
