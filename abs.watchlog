@@ -1,0 +1,57 @@
+#!/bin/bash
+. ~/bin/indexopus.lib
+. ~/.config/abc.conf
+#define abs_token; abs_logpath; abs_server
+# in the file ~/.config/abc.cof
+tput0="$(tput sgr0)"
+bold="$(tput bold)"
+ita="$(tput sitm)"
+itr="$(tput ritm)"
+cyan="$(tput setaf 6)"
+grey="$(tput setaf 7)"
+white="$(tput setaf 15)"
+green="$(tput setaf 2)"
+blue="$(tput setaf 4)"
+yellow="$(tput setaf 3)"
+red="$(tput setaf 1)"
+numout="30"
+
+while (( $# > 0 )); do
+  [[ "$1" = '-n' ]] && shift && numout="$1" && shift
+  [[ "$1" ]] && log="$1"
+done
+
+ [[ ! "$1" ]] && abs_logpath="$abs_logdir/$(date +%Y-%m-%d).txt"
+[[ ! -f "$abs_logpath" || ! "$abs_server" || ! "$abs_token" ]] && echo "Check ~/.config/abc.conf" && exit 1
+
+colorize_log() {
+    while IFS= read -r line; do
+        timestamp=$(echo "$line" | jq -r '.timestamp')
+        source=$(echo "$line" | jq -r '.source')
+        message=$(echo "$line" | jq -r '.message')
+        level=$(echo "$line" | jq -r '.levelName')
+
+        module="${source%.js*}"
+        message=$(echo "$message" | sed "s/\[$module\] //")
+
+
+        [[ "$message" =~ ^\[Scan.* ]] && message="${message#*] }"
+
+        case "$level" in
+            "INFO") color_level="$green$level$tput0" ;;  # Green
+            "DEBUG") color_level="$blue$level$tput0" ;; # Blue
+            "WARN") color_level="$yellow$level$tput0" ;;  # Yellow
+            "ERROR") color_level="$red$level$tput0" ;; # Red
+            *) color_level="$level" ;;
+        esac
+
+        timestamp="${cyan}${bold}[${tput0}${cyan}$timestamp${bold}]$tput0"  # Cyan
+        source="${bold}[${tput0}$(tput sitm)${grey}$module$(tput ritm)$white$bold]${tput0}"
+        message="${tput0}$message"
+
+        printf "%-56s %-57s %-17s %s\n" "$timestamp" "$source" "$color_level" "$message"
+    done
+}
+
+tail -n "$numout" -f "$abs_logpath" | colorize_log
+exit
