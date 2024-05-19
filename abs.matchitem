@@ -130,21 +130,139 @@ gettitles(){
 
 [[ "$1" == @(edit|e|-e) ]] && editscript
 
-
-libid="$default_library"  #from ~/.config/abc.conf
 delimiter=$'\001'
-# Construct the full API URL4
-libid="${libid#* }"
-[[ "$1" = '-L' ]] && libid="$(abs.getlibraries)" && shift
 [[ "$1" = '-U' ]] && uuid_exit="true" && shift
+libid="$default_library"  #from ~/.config/abc.conf
+[[ "$1" = '-L' ]] && libid="$(abs.getlibraries)" && shift
+libid="${libid#* }"
 
-query=$(percent_encode "$1")
+item_id="$(abs.searchlibrary -U "$1")"
 
+pause "$item_id"
+
+abs_endpoint="/api/items/$item_id/match"
+abs_response="$(curl -X POST "$abs_server$abs_endpoint" -H "Authorization: Bearer $abs_token" \
+  -H "Content-Type: application/json" -d '{"provider": "audible"}')"
+
+textparse(){
+# Parse the JSON response using jq
+echo "$abs_response" | jq '
+{
+  updated: .updated,
+  libraryItemId: .libraryItem.id,
+  libraryItemIno: .libraryItem.ino,
+  libraryId: .libraryItem.libraryId,
+  folderId: .libraryItem.folderId,
+  path: .libraryItem.path,
+  mediaType: .libraryItem.mediaType,
+  metadata: {
+    title: .libraryItem.media.metadata.title,
+    authors: .libraryItem.media.metadata.authors[].name,
+    narrators: .libraryItem.media.metadata.narrators,
+    series: .libraryItem.media.metadata.series[].name,
+    genres: .libraryItem.media.metadata.genres,
+    publishedYear: .libraryItem.media.metadata.publishedYear,
+    publisher: .libraryItem.media.metadata.publisher,
+    description: .libraryItem.media.metadata.description
+  },
+  coverPath: .libraryItem.media.coverPath,
+  audioFiles: .libraryItem.media.audioFiles[] | {
+    filename: .metadata.filename,
+    size: .metadata.size,
+    duration: .duration,
+    bitRate: .bitRate
+  },
+  chapters: .libraryItem.media.chapters[] | {
+    id: .id,
+    start: .start,
+    end: .end,
+    title: .title
+  }
+}'
+}
+
+# Parse the JSON response and assign values to variables
+updated=$(echo "$abs_response" | jq -r '.updated')
+libraryItemId=$(echo "$abs_response" | jq -r '.libraryItem.id')
+libraryItemIno=$(echo "$abs_response" | jq -r '.libraryItem.ino')
+libraryId=$(echo "$abs_response" | jq -r '.libraryItem.libraryId')
+folderId=$(echo "$abs_response" | jq -r '.libraryItem.folderId')
+path=$(echo "$abs_response" | jq -r '.libraryItem.path')
+mediaType=$(echo "$abs_response" | jq -r '.libraryItem.mediaType')
+metadata_title=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.title')
+metadata_authors=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.authors[].name' | paste -sd ",")
+metadata_narrators=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.narrators[]' | paste -sd ",")
+metadata_series=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.series[].name' | paste -sd ",")
+metadata_genres=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.genres[]' | paste -sd ",")
+metadata_publishedYear=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.publishedYear')
+metadata_publisher=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.publisher')
+metadata_description=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.description')
+coverPath=$(echo "$abs_response" | jq -r '.libraryItem.media.coverPath')
+
+# Process audio files
+audio_files=$(echo "$abs_response" | jq -r '.libraryItem.media.audioFiles[] | "\(.metadata.filename),\(.metadata.size),\(.duration),\(.bitRate)"')
+audio_files_array=()
+while IFS= read -r line; do
+    audio_files_array+=("$line")
+done <<< "$audio_files"
+
+# Process chapters
+chapters=$(echo "$abs_response" | jq -r '.libraryItem.media.chapters[] | "\(.id),\(.start),\(.end),\(.title)"')
+chapters_array=()
+while IFS= read -r line; do
+    chapters_array+=("$line")
+done <<< "$chapters"
+
+# Example of how to use the variables
+echo "Updated: $updated"
+echo "Library Item ID: $libraryItemId"
+echo "Library Item Ino: $libraryItemIno"
+echo "Library ID: $libraryId"
+echo "Folder ID: $folderId"
+echo "Path: $path"
+echo "Media Type: $mediaType"
+echo "Metadata Title: $metadata_title"
+echo "Metadata Authors: $metadata_authors"
+echo "Metadata Narrators: $metadata_narrators"
+echo "Metadata Series: $metadata_series"
+echo "Metadata Genres: $metadata_genres"
+echo "Metadata Published Year: $metadata_publishedYear"
+echo "Metadata Publisher: $metadata_publisher"
+echo "Metadata Description: $metadata_description"
+echo "Cover Path: $coverPath"
+
+echo "Audio Files:"
+for audio_file in "${audio_files_array[@]}"; do
+    IFS=',' read -r filename size duration bitRate <<< "$audio_file"
+    echo "  Filename: $filename"
+    echo "  Size: $size"
+    echo "  Duration: $duration"
+    echo "  BitRate: $bitRate"
+done
+
+echo "Chapters:"
+for chapter in "${chapters_array[@]}"; do
+    IFS=',' read -r id start end title <<< "$chapter"
+    echo "  ID: $id"
+    echo "  Start: $start"
+    echo "  End: $end"
+    echo "  Title: $title"
+done
+
+
+
+
+exit
 #arrays must be declared outside of functions to be global
+
+
+
+pause "$title_id"
+
 declare -A title_id
 declare -A id_title
 
-gettitles
+
 
 [[ "$(gum choose --height=$(tput lines) --select-if-one "titles" "subtitles")" = titles ]] && query="$(gum choose --select-if-one --height=$(tput lines) "${title_subtitles[@]}")"
 

@@ -1,0 +1,588 @@
+#!/bin/bash
+
+source ~/.config/abc.conf
+shopt -s nullglob extglob dotglob
+bold="$(tput bold)"
+tput0="$(tput sgr0)"
+red="$(tput setaf 1)"
+redbold="${red}${bold}"
+abs_user="4493e7cd-5d8a-4443-b8b2-7d1fd2e6de99"
+
+editscript(){
+  local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"; [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit; printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
+
+pause(){ read -rp "$*" ; }
+
+percent_encode() {
+    jq -rn --arg str "$1" '$str | @uri'
+}
+
+# Function to display book details
+display_book() {
+    echo "Title: ${title}: ${subtitle}"
+    echo "Authors:"
+    for ((j = 0; j < author_count; j++)); do
+        echo "- $(echo "$book" | jq -r ".authors[$j].name")"
+    done
+    echo "Narrator: ${narrator}"
+    echo "Published Year: ${published_year}"
+    echo "Publisher: ${publisher}"
+    echo "Description: ${description}"
+    echo "ASIN: ${asin}"
+    echo "Series: ${series}"
+    echo "Genres: ${genres}"
+    echo "Cover Image: ${cover_image}"
+    echo "Book Directory: ${audio_directory}"
+}
+
+
+display_book_color() {
+    echo "${redbold}Title:${tput0} ${title}: ${subtitle}"
+    echo "${redbold}Authors:${tput0}"
+    #for ((j = 0; j < author_count; j++)); do
+    #    echo "- $(echo "$book" | jq -r ".authors[$j].name")"
+    #done
+    printf -- '- %s\n' "${authors[@]}"
+    echo "${redbold}Narrator:${tput0} ${narrator}"
+    echo "${redbold}Published Year:${tput0} ${published_year}"
+    echo "${redbold}Publisher:${tput0} ${publisher}"
+    echo "${redbold}Description:${tput0} ${description}"
+    echo "${redbold}ASIN:${tput0} ${asin}"
+    echo "${redbold}Series:${tput0} ${series}"
+    echo "${redbold}Genres:${tput0} ${genres}"
+    echo "${redbold}Cover Image:${tput0} ${cover_image}"
+    echo "${redbold}Book Directory:${tput0} ${audio_directory}"
+
+    if [[ ! -z "$user_media_progress" ]]; then
+      echo "User Media Progress: $user_media_progress"
+      echo "User duration: $user_duration"
+      echo "User progress: $user_progress"
+      echo "User current time: $user_currentTime"
+      echo "User is finished: $user_isFinished"
+    fi
+    echo
+}
+
+
+gettitles(){
+  abs_endpoint="/api/libraries/$libid/search/?q=$query&limit=120"
+  abs_url="$abs_server$abs_endpoint"
+
+  # Make API request and store response in a variable
+  abs_response=$(curl -sS "$abs_server$abs_endpoint" -H "Authorization: Bearer $abstoken" )
+
+
+  # Check if the API response is empty or an error occurred
+  if [ -z "$abs_response" ]; then
+    echo "Error: Failed to retrieve data from the API endpoint."
+    exit 1
+  fi
+
+  # Parse JSON response
+  book_count=$(echo "$abs_response" | jq '.book | length')
+
+
+  # Check if there are any books found
+  if [ "$book_count" -eq 0 ]; then
+    echo "No books found."
+    exit 0
+  fi
+
+  # Loop through each book
+  ## There's probably no reason to enable them here since they\'re not needed in the list...
+  for ((i=0; i<book_count; i++)); do
+      book=$(echo "$abs_response" | jq ".book[$i].libraryItem.media.metadata")
+      title=$(echo "$book" | jq -r '.title')
+      subtitle=$(echo "$book" | jq -r '.subtitle')
+      author_count=$(echo "$book" | jq '.authors | length')
+      published_year=$(echo "$book" | jq -r '.publishedYear')
+      asin=$(echo "$book" | jq -r '.asin')
+      libraryItemId=$(echo "$abs_response" | jq -r ".book[$i].libraryItem.media.libraryItemId")
+      audio_directory=$(echo "$book" | jq -r '.path'); audio_directory="${audio_directory%\/*}"
+  ##    series=$(echo "$book" | jq -r '.series[0].name')
+  ##    narrator=$(echo "$book" | jq -r '.narratorName')
+  ##    publisher=$(echo "$book" | jq -r '.publisher')
+  ##    description=$(echo "$book" | jq -r '.description')
+  ##    genres=$(echo "$book" | jq -r '.genres | join(", ")')
+  ##    cover_image=$(echo "$abs_response" | jq -r ".book[$i].libraryItem.media.coverPath")
+
+      # Add authors to the array
+      for ((j = 0; j < author_count; j++)); do
+          authors+=("$(echo "$book" | jq -r ".authors[$j].name")")
+      done
+      # Add title with subtitle to the array
+
+  #arrays:
+      title_subtitles+=("${title}${delimiter}: ${subtitle}")
+      titles+=("${title}")
+      subtitles+=("${subtitle}")
+      itemids+=( "${libraryItemId}" )
+      title_id["${titles[$i]}"]="${itemids[$i]}"
+      id_title["${itemids[i]}"]="${titles[i]}"
+
+  done
+}
+
+
+[[ ! "$1" ]] && printf '\nPlease provide some motherfuckin'\'' search terms! exit (1)\n\n' && exit 1
+
+[[ "$1" == @(edit|e|-e) ]] && editscript
+
+
+
+title="$1"
+author="$2"
+provider="audible"
+
+search_books() {
+    local title="$1"
+    local author="$2"
+    local provider="${3:-audible}"
+
+    curl -s -G "${abs_server}/api/search/books" \
+        -H "Authorization: Bearer ${abs_token}" \
+        --data-urlencode "title=${title}" \
+        --data-urlencode "author=${author}" \
+        --data-urlencode "provider=${provider}"
+}
+
+# Function to display search results
+display_results() {
+    local books_array=("$@")
+    local counter=1
+
+    for book_json in "${books_array[@]}"; do
+        echo "$book_json" | jq -r --arg counter "$counter" '
+        "\n[" + $counter + "] Title: " + (.title // "N/A") + 
+        "\n    Author: " + (.author // "N/A") + 
+        "\n    Publisher: " + (.publisher // "N/A") + 
+        "\n    Published Year: " + (.publishedYear // "N/A") + 
+        "\n    Description: " + (.description // "N/A")[:75] + "..." + 
+        "\n    Cover: " + (.cover // "N/A") + 
+        "\n    ASIN: " + (.asin // "N/A") + "\n"'
+        ((counter++))
+    done
+}
+
+
+# Search for books
+abs_response=$(search_books "$title" "$author" "$provider")
+
+# Break abs_response into individual book JSONs and put them in an array
+IFS=$'\n' read -r -d '' -a books_array < <(echo "$abs_response" | jq -c '.[]' && printf '\0')
+
+# Display search results
+if [ ${#books_array[@]} -gt 0 ]; then
+    display_results "${books_array[@]}"
+else
+    echo "No books found."
+    exit 1
+fi
+
+# Loop to select a book
+while true; do
+    read -p "Enter the number of the book you want to select: " selection
+    if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le ${#books_array[@]} ]; then
+        selected_book=$(echo "${books_array[$((selection-1))]}" | jq '.')
+        title=$(echo "$selected_book" | jq -r '.title')
+        author=$(echo "$selected_book" | jq -r '.author')
+        echo "You selected: $title by $author"
+        break
+    else
+        echo "Invalid selection. Please try again."
+    fi
+done
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+exit
+
+
+
+# Function to search for books on Audible
+search_books() {
+    local title="$1"
+    local author="$2"
+    local provider="${3:-audible}"
+
+    curl -s -G "${abs_server}/api/search/books" \
+        -H "Authorization: Bearer ${abs_token}" \
+        --data-urlencode "title=${title}" \
+        --data-urlencode "author=${author}" \
+        --data-urlencode "provider=${provider}"
+}
+
+# Function to display search results
+display_results() {
+    local books_json="$1"
+    echo "$books_json" | jq -r '.[] | 
+    "\n[" + (input_line_number|tostring) + "] Title: " + (.title // "N/A") + 
+    "\n    Author: " + (.author // "N/A") + 
+    "\n    Publisher: " + (.publisher // "N/A") + 
+    "\n    Published Year: " + (.publishedYear // "N/A") + 
+    "\n    Description: " + (.description // "N/A")[:75] + "..." + 
+    "\n    Cover: " + (.cover // "N/A") + 
+    "\n    ASIN: " + (.asin // "N/A") + "\n"'
+}
+
+
+title="$1"
+author="$2"
+provider="audible"
+
+    # Search for books
+    books_json=$(search_books "$title" "$author" "$provider")
+
+    # Display search results
+    if [ -n "$books_json" ] && [ "$books_json" != "[]" ]; then
+        display_results "$books_json"
+    else
+        echo "No books found."
+        exit 1
+    fi
+
+    # Loop to select a book
+    while true; do
+        read -p "Enter the number of the book you want to select: " selection
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le $(echo "$books_json" | jq 'length') ]; then
+            selected_book=$(echo "$books_json" | jq ".[$((selection-1))]")
+            title=$(echo "$selected_book" | jq -r '.title')
+            author=$(echo "$selected_book" | jq -r '.author')
+            echo "You selected: $title by $author"
+            break
+        else
+            echo "Invalid selection. Please try again."
+        fi
+    done
+
+exit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Set the book title and author
+title="$(percent_encode "$1")"
+author="$(percent_encode "$2")"
+provider="audible"
+
+echo "$abs_server/api/search/books?title=$title&author=$author&provider=$provider Authorization: Bearer $abs_token"
+
+# Make the curl call and store the response in a variable
+abs_response=$(curl -s "$abs_server/api/search/books?title=$title&author=$author&provider=$provider"  -H "Authorization: Bearer $abs_token")
+
+pause "$abs_response"
+
+# Parse the JSON response and assign values to an array
+book_titles=($(echo "$abs_response" | jq -r '.[].title'))
+book_authors=($(echo "$abs_response" | jq -r '.[].author'))
+book_publishers=($(echo "$abs_response" | jq -r '.[].publisher'))
+book_publishedYears=($(echo "$abs_response" | jq -r '.[].publishedYear'))
+book_descriptions=($(echo "$abs_response" | jq -r '.[].description'))
+book_covers=($(echo "$abs_response" | jq -r '.[].cover'))
+book_asins=($(echo "$abs_response" | jq -r '.[].asin'))
+
+# Loop through the results and display them
+echo "Search Results:"
+for i in "${!book_titles[@]}"; do
+    echo "[$i] Title: ${book_titles[$i]}"
+    echo "    Author: ${book_authors[$i]}"
+    echo "    Publisher: ${book_publishers[$i]}"
+    echo "    Published Year: ${book_publishedYears[$i]}"
+    echo "    Description: ${book_descriptions[$i]}"
+    echo "    Cover: ${book_covers[$i]}"
+    echo "    ASIN: ${book_asins[$i]}"
+    echo
+done
+
+# Prompt the user to select a book
+read -p "Enter the number of the book you want to select: " selected_index
+
+# Validate the input
+if [[ ! $selected_index =~ ^[0-9]+$ ]] || [ $selected_index -ge ${#book_titles[@]} ]; then
+    echo "Invalid selection"
+    exit 1
+fi
+
+# Display the selected book details
+echo "You selected:"
+echo "Title: ${book_titles[$selected_index]}"
+echo "Author: ${book_authors[$selected_index]}"
+echo "Publisher: ${book_publishers[$selected_index]}"
+echo "Published Year: ${book_publishedYears[$selected_index]}"
+echo "Description: ${book_descriptions[$selected_index]}"
+echo "Cover: ${book_covers[$selected_index]}"
+echo "ASIN: ${book_asins[$selected_index]}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+exit
+
+
+delimiter=$'\001'
+[[ "$1" = '-U' ]] && uuid_exit="true" && shift
+libid="$default_library"  #from ~/.config/abc.conf
+[[ "$1" = '-L' ]] && libid="$(abs.getlibraries)" && shift
+libid="${libid#* }"
+
+item_id="$(abs.searchlibrary -U "$1")"
+
+pause "$item_id"
+
+abs_endpoint="/api/items/$item_id/match"
+abs_response="$(curl -X POST "$abs_server$abs_endpoint" -H "Authorization: Bearer $abs_token" \
+  -H "Content-Type: application/json" -d '{"provider": "audible"}')"
+
+textparse(){
+# Parse the JSON response using jq
+echo "$abs_response" | jq '
+{
+  updated: .updated,
+  libraryItemId: .libraryItem.id,
+  libraryItemIno: .libraryItem.ino,
+  libraryId: .libraryItem.libraryId,
+  folderId: .libraryItem.folderId,
+  path: .libraryItem.path,
+  mediaType: .libraryItem.mediaType,
+  metadata: {
+    title: .libraryItem.media.metadata.title,
+    authors: .libraryItem.media.metadata.authors[].name,
+    narrators: .libraryItem.media.metadata.narrators,
+    series: .libraryItem.media.metadata.series[].name,
+    genres: .libraryItem.media.metadata.genres,
+    publishedYear: .libraryItem.media.metadata.publishedYear,
+    publisher: .libraryItem.media.metadata.publisher,
+    description: .libraryItem.media.metadata.description
+  },
+  coverPath: .libraryItem.media.coverPath,
+  audioFiles: .libraryItem.media.audioFiles[] | {
+    filename: .metadata.filename,
+    size: .metadata.size,
+    duration: .duration,
+    bitRate: .bitRate
+  },
+  chapters: .libraryItem.media.chapters[] | {
+    id: .id,
+    start: .start,
+    end: .end,
+    title: .title
+  }
+}'
+}
+
+# Parse the JSON response and assign values to variables
+updated=$(echo "$abs_response" | jq -r '.updated')
+libraryItemId=$(echo "$abs_response" | jq -r '.libraryItem.id')
+libraryItemIno=$(echo "$abs_response" | jq -r '.libraryItem.ino')
+libraryId=$(echo "$abs_response" | jq -r '.libraryItem.libraryId')
+folderId=$(echo "$abs_response" | jq -r '.libraryItem.folderId')
+path=$(echo "$abs_response" | jq -r '.libraryItem.path')
+mediaType=$(echo "$abs_response" | jq -r '.libraryItem.mediaType')
+metadata_title=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.title')
+metadata_authors=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.authors[].name' | paste -sd ",")
+metadata_narrators=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.narrators[]' | paste -sd ",")
+metadata_series=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.series[].name' | paste -sd ",")
+metadata_genres=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.genres[]' | paste -sd ",")
+metadata_publishedYear=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.publishedYear')
+metadata_publisher=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.publisher')
+metadata_description=$(echo "$abs_response" | jq -r '.libraryItem.media.metadata.description')
+coverPath=$(echo "$abs_response" | jq -r '.libraryItem.media.coverPath')
+
+# Process audio files
+audio_files=$(echo "$abs_response" | jq -r '.libraryItem.media.audioFiles[] | "\(.metadata.filename),\(.metadata.size),\(.duration),\(.bitRate)"')
+audio_files_array=()
+while IFS= read -r line; do
+    audio_files_array+=("$line")
+done <<< "$audio_files"
+
+# Process chapters
+chapters=$(echo "$abs_response" | jq -r '.libraryItem.media.chapters[] | "\(.id),\(.start),\(.end),\(.title)"')
+chapters_array=()
+while IFS= read -r line; do
+    chapters_array+=("$line")
+done <<< "$chapters"
+
+# Example of how to use the variables
+echo "Updated: $updated"
+echo "Library Item ID: $libraryItemId"
+echo "Library Item Ino: $libraryItemIno"
+echo "Library ID: $libraryId"
+echo "Folder ID: $folderId"
+echo "Path: $path"
+echo "Media Type: $mediaType"
+echo "Metadata Title: $metadata_title"
+echo "Metadata Authors: $metadata_authors"
+echo "Metadata Narrators: $metadata_narrators"
+echo "Metadata Series: $metadata_series"
+echo "Metadata Genres: $metadata_genres"
+echo "Metadata Published Year: $metadata_publishedYear"
+echo "Metadata Publisher: $metadata_publisher"
+echo "Metadata Description: $metadata_description"
+echo "Cover Path: $coverPath"
+
+echo "Audio Files:"
+for audio_file in "${audio_files_array[@]}"; do
+    IFS=',' read -r filename size duration bitRate <<< "$audio_file"
+    echo "  Filename: $filename"
+    echo "  Size: $size"
+    echo "  Duration: $duration"
+    echo "  BitRate: $bitRate"
+done
+
+echo "Chapters:"
+for chapter in "${chapters_array[@]}"; do
+    IFS=',' read -r id start end title <<< "$chapter"
+    echo "  ID: $id"
+    echo "  Start: $start"
+    echo "  End: $end"
+    echo "  Title: $title"
+done
+
+
+
+
+exit
+#arrays must be declared outside of functions to be global
+
+
+
+pause "$title_id"
+
+declare -A title_id
+declare -A id_title
+
+
+
+[[ "$(gum choose --height=$(tput lines) --select-if-one "titles" "subtitles")" = titles ]] && query="$(gum choose --select-if-one --height=$(tput lines) "${title_subtitles[@]}")"
+
+query="${query%$'\001'*}"
+query="${title_id["$query"]}"
+
+abs_endpoint="/api/libraries/$libid/search/?q=$query"
+
+abs_endpoint="/api/items/$query?expanded=1&include=progress,authors"
+
+title_response=$(curl -sS "$abs_server$abs_endpoint" -H "Authorization: Bearer $abstoken" )
+
+# Parse JSON response
+title_count=$(echo "$title_response" | jq '.libraryFiles | length')
+title_count=$(echo "$title_response" | jq '. | if .id then 1 else 0 end')
+
+# Check if there are any books found
+if [ "$title_count" -eq 0 ]; then
+    echo "No books found."
+    exit 0
+fi
+
+unset title authors author_count authors authors narrator published_year publisher description asin series genres cover_image audio_directory user_media_progress
+
+    # Parse JSON data
+    title=$(echo "$title_response" | jq -r '.media.metadata.title')
+    authors=$(echo "$title_response" | jq -r '.media.metadata.authors[0].name')
+    author_count=$(echo "$title_response" | jq '.media.metadata.authors | length')
+    authors=()
+
+# Loop through authors and add them to the authors array
+    for ((j = 0; j < author_count; j++)); do
+      authors+=("$(echo "$title_response" | jq -r ".media.metadata.authors[$j].name")")
+    done
+
+    narrator=$(echo "$title_response" | jq -r '.media.metadata.narrators[0]')
+    published_year=$(echo "$title_response" | jq -r '.media.metadata.publishedYear')
+    publisher=$(echo "$title_response" | jq -r '.media.metadata.publisher')
+    description=$(echo "$title_response" | jq -r '.media.metadata.description')
+    asin=$(echo "$title_response" | jq -r '.media.metadata.asin')
+    series=$(echo "$title_response" | jq -r '.media.metadata.series[0]' )
+    genres=$(echo "$title_response" | jq -r '.media.metadata.genres | join(", ")')
+    cover_image=$(echo "$title_response" | jq -r '.media.coverPath')
+    audio_directory=$(echo "$title_response" | jq -r '.media.audioFiles[0].metadata.path | split("/") | .[:-1] | join("/")')
+
+    user_media_progress=$(echo "$title_response" | jq -r '.userMediaProgress')
+
+    if [ -n "$user_media_progress" ]; then
+
+      # Parse the specific fields for the user progress
+      user_duration=$(echo "$user_media_progress" | jq -r '.durations')
+      user_progress=$(echo "$user_media_progress" | jq -r '.progress')
+      user_currentTime=$(echo "$user_media_progress" | jq -r '.currentTime')
+      user_isFinished=$(echo "$user_media_progress" | jq -r '.isFinished')
+
+    fi
+
+    # Display book details
+
+    titdisplaychoice=$(gum choose --height=$(tput lines) < <(display_book_color))
+
+#    # Add title with subtitle to the array
+#    titles+=("${title}: ${subtitle}")
+
+titdisplaychoice="${titdisplaychoice%%:*}"
+
+if [[ "$titdisplaychoice" = @(Book\ Directory|Title) ]]; then
+  echo
+  cd "$audio_directory"
+  tmpdir="$(mktemp -d)"
+#  cat ~/.bashrc ~/.bash_aliases >> "$tmpdir/.bashrc"
+  cp ~/.bashrc "$tmpdir"
+  echo "PS1='\[\033[3m\]\D{%#Z %-I.%M %P}\[\033[01;34m\]  pwd: \w\[\033[00m\]\[\033[0m\]\[\033[01;31m\] \n\[\033[1;31m\]abs.searchlibrary \[\033[1;33m\]bash@\h \[\033[1;37m\]\$ '" >> "$tmpdir/.bashrc"
+  cd "${audio_directory%\/*}"
+  /usr/bin/bash --rcfile "$tmpdir/.bashrc"
+  #proot -r "${audio_directory%\/*}" /usr/bin/bash --rcfile "$tmpdir/.bashrc"
+fi
+
+[[ "$uuid_exit" != true ]] && display_book_color && exit 0
+[[ "$uuid_exit" = true ]] && echo "$query" && exit 0
+
+exit
+
