@@ -16,14 +16,6 @@ yellow="$(tput setaf 3)"
 red="$(tput setaf 1)"
 numout="30"
 
-while (( $# > 0 )); do
-  [[ "$1" = '-n' ]] && shift && numout="$1" && shift
-  [[ "$1" ]] && log="$1"
-done
-
- [[ ! "$1" ]] && abs_logpath="$abs_logdir/$(date +%Y-%m-%d).txt"
-[[ ! -f "$abs_logpath" || ! "$abs_server" || ! "$abs_token" ]] && echo "Check ~/.config/abc.conf" && exit 1
-
 colorize_log() {
     while IFS= read -r line; do
         timestamp=$(echo "$line" | jq -r '.timestamp')
@@ -53,5 +45,48 @@ colorize_log() {
     done
 }
 
+
+while (( $# > 0 )); do
+  [[ "$1" = '-n' ]] && shift && numout="$1" && shift
+  [[ "$1" = '-i' ]] && shift && ignore+=("$1") && shift && flag_ignore=true
+  [[ "$1" = '-l' ]] && shift && abs_logpath="$1" && shift
+done
+
+
+[[ ! "$abs_logpath" ]] && abs_logpath="$abs_logdir/$(date +%Y-%m-%d).txt"
+
+
+echo "${bold}abs log path: $abs_logpath$tput0"
+
+
+ [[ ! -f "$abs_logpath" || ! "$abs_server" || ! "$abs_token" ]] &&
+    echo "Check ~/.config/abc.conf" &&
+    exit 1
+
+#tail -n "$numout" -f "$abs_logpath" | colorize_log
+#tail -n "$numout" -f "$abs_logpath" | jq -c 'select(.source | contains("ApiCacheManager") | not)' | colorize_log
+
+unset ignore_tmp
+
+if [[ ${flag_ignore} = true ]] ; then
+  ignores="$( IFS=\|; echo "${ignore[*]}" )"
+# for i in "${ignore[@]}"; do
+#   if [[ "$ignore_tmp" ]]; then
+#   ignore_tmp+='|'
+#   fi
+#   ignore_tmp+="$i"
+# done
+
+pause "$ignores"
+#  [[ $( opustags "$output" |grep -E "$mp4grep" ) ]] && opustags "${mp4opustags[@]}"
+
+tail -n "$numout" -f "$abs_logpath" | grep -Evi "$ignores" | colorize_log
+
+else
 tail -n "$numout" -f "$abs_logpath" | colorize_log
+
+fi
+
+
+
 exit

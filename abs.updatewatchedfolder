@@ -19,26 +19,7 @@ percent_encode() {
     jq -rn --arg str "$1" '$str | @uri'
 }
 
-# Function to display book details
 display_book() {
-    echo "Title: ${title}: ${subtitle}"
-    echo "Authors:"
-    for ((j = 0; j < author_count; j++)); do
-        echo "- $(echo "$book" | jq -r ".authors[$j].name")"
-    done
-    echo "Narrator: ${narrator}"
-    echo "Published Year: ${published_year}"
-    echo "Publisher: ${publisher}"
-    echo "Description: ${description}"
-    echo "ASIN: ${asin}"
-    echo "Series: ${series}"
-    echo "Genres: ${genres}"
-    echo "Cover Image: ${cover_image}"
-    echo "Book Directory: ${audio_directory}"
-}
-
-
-display_book_color() {
     echo "${redbold}Title:${tput0} ${title}: ${subtitle}"
     echo "${redbold}Authors:${tput0}"
     #for ((j = 0; j < author_count; j++)); do
@@ -128,8 +109,19 @@ gettitles(){
 
 #[[ ! "$1" ]] && printf '\nPlease provide some motherfuckin'\'' search terms! exit (1)\n\n' && exit 1
 
-[[ "$1" == @(edit|e|-e) ]] && editscript
+[[ "$1" = @(edit|e|-e) ]] && editscript
+
 . ~/.config/abc.conf
+
+if [[ "$1" = -l || "$1" = --library ]]; then
+shift
+libid="$1"
+shift
+fi
+
+
+
+
 [[ ! "$abs_server" || ! "$abs_token" ]] && echo "Check ~/.config/abc.conf" && exit 1
 
 abs_endpoint="/api/watcher/update"
@@ -154,3 +146,4 @@ abs_response="$(curl -X POST "$abs_server$abs_endpoint" \
 
 echo "$abs_response"
 
+abs.searchlibrary "${PWD%%:*}"

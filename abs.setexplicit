@@ -1,0 +1,139 @@
+#!/bin/bash
+# nb: the swp file that editscript relies on is provided by nano
+
+set_explicit_to=true
+
+# include in ~/.config/abc.conf:
+#abs_server="https://url.audiobookshelf.server"
+#abs_sqlite="/path/to/abs/config/absdatabase.sqlite"
+#abs_token=" < ---        API TOKEN     --- > "
+#abstoken="$abs_token"
+#default_library="uuid: ########-####-####-####-############"
+#abs_logdir="/path/to/abs/metadata/logs/daily"
+
+
+. ~/.config/abc.conf
+shopt -s nullglob extglob dotglob
+bold="$(tput bold)"
+tput0="$(tput sgr0)"
+red="$(tput setaf 1)"
+redbold="${red}${bold}"
+abs_user="4493e7cd-5d8a-4443-b8b2-7d1fd2e6de99"
+
+editscript(){
+  local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"
+     [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit
+     printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
+
+pause(){ read -rp "$*" < /dev/tty; }
+
+display_book_color() {
+    echo "${redbold}Title:${tput0} ${title}"
+    echo "${redbold}Author:${tput0} ${author}"
+    echo "${redbold}Published Year:${tput0} ${published_year}"
+    echo "${redbold}Publisher:${tput0} ${publisher}"
+    echo "${redbold}Description:${tput0} ${description}"
+    echo "${redbold}ASIN:${tput0} ${asin}"
+    echo "${redbold}Series:${tput0} ${series}"
+    echo "${redbold}Genres:${tput0} ${genres}"
+    echo "${redbold}Cover Image:${tput0} ${cover_image}"
+    echo "${redbold}Book Directory:${tput0} ${audio_directory}"
+}
+
+get_library_items() {
+    local libid="$1"
+    abs_endpoint="/api/libraries/$libid/items?minified=1&collapseseries=0"
+    abs_url="$abs_server$abs_endpoint"
+
+    # Make API request and store response in a variable
+    abs_response=$(curl -sS "$abs_url" -H "Authorization: Bearer $abstoken")
+
+    # Check if the API response is empty or an error occurred
+    if [ -z "$abs_response" ]; then
+        echo "Error: Failed to retrieve data from the API endpoint."
+        exit 1
+    fi
+
+    # Parse JSON response
+    item_count=$(echo "$abs_response" | jq '.results | length')
+
+    # Check if there are any items found
+    if [ "$item_count" -eq 0 ]; then
+        echo "No items found."
+        exit 0
+    fi
+
+    # Loop through each item
+    if [[ "$fulldisplay" = true ]]; then
+      for ((i=0; i<item_count; i++)); do
+          item=$(echo "$abs_response" | jq ".results[$i]")
+          title=$(echo "$item" | jq -r '.media.metadata.title')
+          author=$(echo "$item" | jq -r '.media.metadata.authorName')
+          published_year=$(echo "$item" | jq -r '.media.metadata.publishedYear')
+          publisher=$(echo "$item" | jq -r '.media.metadata.publisher')
+          description=$(echo "$item" | jq -r '.media.metadata.description')
+          asin=$(echo "$item" | jq -r '.media.metadata.asin')
+          series=$(echo "$item" | jq -r '.media.metadata.seriesName')
+          genres=$(echo "$item" | jq -r '.media.metadata.genres | join(", ")')
+          cover_image=$(echo "$item" | jq -r '.media.coverPath')
+          audio_directory=$(echo "$item" | jq -r '.path')
+
+          # Display item details
+          display_book_color
+      done
+    else
+      item_ids=()
+      for ((i=0; i<item_count; i++)); do
+          item=$(echo "$abs_response" | jq ".results[$i]")
+          explicit=$(echo "$item" | jq -r '.media.metadata.explicit')
+          title=$(echo "$item" | jq -r '.media.metadata.title')
+          item_id=$(echo "$abs_response" | jq -r ".results[$i].id")
+          item_ids+=("$item_id")
+          echo "$explicit $title: $item_id"
+          [[ "$explicit" != "$set_explicit_to" ]] && update_explicit_flag "$item_id"
+      done
+
+
+    fi
+}
+
+
+
+
+
+
+
+
+
+update_explicit_flag() {
+    local item_id="$1"
+    abs_endpoint="/api/items/$item_id/media"
+    abs_url="$abs_server$abs_endpoint"
+    data='{"metadata": {"explicit": "$set_explicit_to"}}'
+
+    # Make PATCH request to update explicit flag
+    update_response=$(curl -sS -X PATCH "$abs_url" -H "Authorization: Bearer $abstoken" -H "Content-Type: application/json" -d "$data")
+
+    # Check if the update was successful
+    if echo "$update_response" | jq -e '.updated' >/dev/null; then
+        echo "Successfully updated item: $item_id"
+    else
+        echo "Failed to update item: $item_id"
+    fi
+}
+
+
+
+
+
+[[ "$1" == @(edit|e|-e) ]] && editscript
+
+libid="$default_library"  #from ~/.config/abc.conf
+delimiter=$'\001'
+# Construct the full API URL4
+[[ "$1" = '-L' ]] && libid="$(abs.getlibraries)" && shift
+libid="${libid#* }"
+[[ "$1" = '-U' ]] && uuid_exit="true" && shift
+
+pause "$libid"
+get_library_items "$libid"

@@ -134,8 +134,9 @@ gettitles(){
 libid="$default_library"  #from ~/.config/abc.conf
 delimiter=$'\001'
 # Construct the full API URL4
-libid="${libid#* }"
 [[ "$1" = '-L' ]] && libid="$(abs.getlibraries)" && shift
+libid="${libid#* }"
+
 [[ "$1" = '-U' ]] && uuid_exit="true" && shift
 
 query=$(percent_encode "$1")
@@ -143,7 +144,7 @@ query=$(percent_encode "$1")
 #arrays must be declared outside of functions to be global
 declare -A title_id
 declare -A id_title
-
+pause "$query"
 gettitles
 
 [[ "$(gum choose --height=$(tput lines) --select-if-one "titles" "subtitles")" = titles ]] && query="$(gum choose --select-if-one --height=$(tput lines) "${title_subtitles[@]}")"
