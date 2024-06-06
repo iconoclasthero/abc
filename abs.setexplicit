@@ -90,7 +90,8 @@ get_library_items() {
           item_id=$(echo "$abs_response" | jq -r ".results[$i].id")
           item_ids+=("$item_id")
           echo "$explicit $title: $item_id"
-          [[ "$explicit" != "$set_explicit_to" ]] && update_explicit_flag "$item_id"
+#          [[ "$explicit" = '$set_explicit_to' ]] && 
+update_explicit_flag "$item_id"
       done
 
 
@@ -109,7 +110,8 @@ update_explicit_flag() {
     local item_id="$1"
     abs_endpoint="/api/items/$item_id/media"
     abs_url="$abs_server$abs_endpoint"
-    data='{"metadata": {"explicit": "$set_explicit_to"}}'
+    [[ "$set_explicit_to" = true ]] && data='{"metadata": {"explicit": true}}' || data='{"metadata": {"explicit": false}}' ||
+
 
     # Make PATCH request to update explicit flag
     update_response=$(curl -sS -X PATCH "$abs_url" -H "Authorization: Bearer $abstoken" -H "Content-Type: application/json" -d "$data")
@@ -130,10 +132,7 @@ update_explicit_flag() {
 
 libid="$default_library"  #from ~/.config/abc.conf
 delimiter=$'\001'
-# Construct the full API URL4
 [[ "$1" = '-L' ]] && libid="$(abs.getlibraries)" && shift
 libid="${libid#* }"
-[[ "$1" = '-U' ]] && uuid_exit="true" && shift
 
-pause "$libid"
 get_library_items "$libid"
