@@ -1,0 +1,44 @@
+#absown.path
+[Unit]
+Description=Watch for changes in specific directories
+
+[Install]
+WantedBy=paths.target
+
+[Path]
+[Unit]
+Description=Watch for changes in specific directories
+
+[Install]
+WantedBy=paths.target
+
+[Path]
+PathModified=/library/books/audiobooks/
+PathModified=/library/books/audiobooks/*
+PathModified=/library/books/audiobooks/*/*
+PathModified=/library/books/collections/
+PathModified=/library/books/collections/*
+PathModified=/library/books/collections/*/*
+PathModified=/library/books/collections/*/*/*
+PathModified=/library/books/periodicals/
+PathModified=/library/books/periodicals/*
+PathModified=/library/books/periodicals/*/*
+PathModified=/library/books/smut/
+PathModified=/library/books/smut/*
+PathModified=/library/books/smut/*/*
+PathModified=/library/books/ebooks/
+PathModified=/library/books/ebooks/*
+PathModified=/library/books/ebooks/*/*
+PathModified=/library/books/meditation/
+PathModified=/library/books/meditation/*
+PathModified=/library/books/meditation/*/*
+PathModified=/library/books/private/
+PathModified=/library/books/private/*
+PathModified=/library/books/private/*/*
+PathModified=/library/books/recovery/
+PathModified=/library/books/recovery/*
+PathModified=/library/books/recovery/*/*
+PathModified=/library/books/The Great Courses & The Modern Scholar/
+PathModified=/library/books/The Great Courses & The Modern Scholar/*
+PathModified=/library/books/The Great Courses & The Modern Scholar/*/*
+PathModified=/library/books/The Great Courses & The Modern Scholar/*/*/*

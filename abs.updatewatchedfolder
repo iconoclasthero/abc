@@ -7,8 +7,6 @@ tput0="$(tput sgr0)"
 red="$(tput setaf 1)"
 redbold="${red}${bold}"
 abs_user="4493e7cd-5d8a-4443-b8b2-7d1fd2e6de99"
-libid="$default_library"
-libid="${default_library#* }"
 
 editscript(){
   local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"; [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit; printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
@@ -107,22 +105,20 @@ gettitles(){
 }
 
 
-#[[ ! "$1" ]] && printf '\nPlease provide some motherfuckin'\'' search terms! exit (1)\n\n' && exit 1
-
-[[ "$1" = @(edit|e|-e) ]] && editscript
-
 . ~/.config/abc.conf
 
-if [[ "$1" = -l || "$1" = --library ]]; then
-shift
-libid="$1"
-shift
-fi
+libid="$default_library"
+
+while (( $# > 0 )); do
+[[ "$1" = @(edit|e|-e) ]] && editscript
+[[ "$1" = -l || "$1" = --library || "$1" =~ "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[4][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$" ]] && shift && libid="$1" && shift
+[[ "$1" = '-L' ]] && libid="$(abs.getlibraries)" && shift
+done
+
+libid="${libid#* }"  #if the library uuid isn\'t prefixed with `uuid: ` then there shouldn\'t be a space that matters...
 
 
-
-
-[[ ! "$abs_server" || ! "$abs_token" ]] && echo "Check ~/.config/abc.conf" && exit 1
+[[ ! "$libid" || ! "$abs_server" || ! "$abs_token" ]] && echo "Check ~/.config/abc.conf" && exit 1
 
 abs_endpoint="/api/watcher/update"
 
@@ -131,10 +127,19 @@ JSON_PAYLOAD=$(cat <<EOF
   "libraryId": "$libid",
   "path": "$PWD",
   "type": "add"  `# or "unlink" or "rename"`
-`# "oldPath": "your-old-path" # Uncomment this line if type is "rename"`
 }
 EOF
 )
+
+#JSON_PAYLOAD=$(cat <<EOF
+#{
+#  "libraryId": "$libid",
+#  "path": "$PWD",
+#  "type": "add"  `# or "unlink" or "rename"`
+#`# "oldPath": "your-old-path" # Uncomment this line if type is "rename"`
+#}
+#EOF
+#)
 
 pause "$JSON_PAYLOAD"
 pause "abs_response=curl -X POST "$abs_server$abs_endpoint"  -H "Content-Type: application/json" -H "Authorization: Bearer $abs_token"  -d "$JSON_PAYLOAD")"
