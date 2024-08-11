@@ -78,7 +78,6 @@ if [[ ${flag_ignore} = true ]] ; then
 # done
 
 pause "$ignores"
-#  [[ $( opustags "$output" |grep -E "$mp4grep" ) ]] && opustags "${mp4opustags[@]}"
 
 tail -n "$numout" -f "$abs_logpath" | grep -Evi "$ignores" | colorize_log
 
