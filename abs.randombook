@@ -20,10 +20,15 @@ while [[ "$#" -gt 0 ]]; do
     --library=*)
         libraryArg="${1#*=}"
         ;;
-    --library)
-        # if no argument is given with --library then run abs.getlibraries for user selection
+    --library)  # if no argument is given with --library then run abs.getlibraries for user selection
         libraryId=$(abs.getlibraries | tail -n2 | head -n1 | sed 's/uuid: //')
         echo "Using library ID: $libraryId"
+        ;;
+    --genre=*)
+        genre="${1#*=}"
+        ;;
+    --genre)  # if no argument, provide listing of genres with > 2 entries
+        sqlite3 /library/books/.share/abs/config/absdatabase.sqlite "SELECT genres FROM books;" | sed 's/^\[//'|sed 's/\]$//'|tr ',' '\n'|sort|uniq -c|awk '$1 >= 2 { $1=""; print substr($0, 2) }'
         ;;
     *)
         limit="$1"
@@ -43,6 +48,12 @@ elif [[ -n "$libraryArg" ]]; then
   fi
 fi
 
+if [ -n "$genre" ]; then
+    genre_filter="AND '$genre' IN (SELECT value FROM json_each(b.genres))"
+else
+    genre_filter=""
+fi
+
 query="SELECT b.title, b.subtitle, a.lastFirst AS author, li.path, l.name AS library_name
   FROM books b
   JOIN bookAuthors ba ON b.id = ba.bookId
@@ -50,6 +61,7 @@ query="SELECT b.title, b.subtitle, a.lastFirst AS author, li.path, l.name AS lib
   JOIN libraryItems li ON b.id = li.mediaId
   JOIN libraries l ON li.libraryId = l.id
   WHERE li.libraryId = '$libraryId'
+  $genre_filter
   ORDER BY RANDOM()
   LIMIT $limit;"
 
@@ -59,7 +71,7 @@ if [ -n "$random_books" ]; then
   IFS=$'\n'
   for book in $random_books; do
     IFS="|" read -r title subtitle author path library_name <<< "$book"
-    echo "Title: $title: $subtitle"
+    echo "Title: $title${subtitle:+: $subtitle}"
     echo "Author: $author"
     echo "Path: $path"
     echo "Library: $library_name"
