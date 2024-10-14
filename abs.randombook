@@ -1,0 +1,71 @@
+#!/bin/bash
+
+editscript(){
+  local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"
+     [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit
+     printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
+[[ "$1" == @(edit|e|-e) ]] && editscript
+
+pause(){ read -rp "$*" < /dev/tty; }
+
+unset libraryArg
+db="/library/books/.share/abs/config/absdatabase.sqlite"
+limit=1  # Default to 1 if no argument is provided
+
+. ~/.config/abc.conf
+
+libraryId="${default_library#uuid: }"
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --library=*) 
+        libraryArg="${1#*=}" 
+        ;;
+    --library)
+        # Run abs.getlibraries and get the last library UUID
+        libraryId=$(abs.getlibraries | tail -n2 | head -n1 | sed 's/uuid: //')
+        echo "Using library ID: $libraryId"  # Optional: Inform the user
+        ;;
+    *) 
+        limit="$1"  # Assume this is the limit if it's not an option
+        ;;
+  esac
+  shift
+done
+
+# Check if the libraryArg is a UUID or a name
+if [[ "$libraryArg" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+  libraryId="$libraryArg"  # It's a UUID
+elif [[ -n "$libraryArg" ]]; then
+  libraryId=$(sqlite3 "$db" "SELECT id FROM libraries WHERE name = '$libraryArg';")
+  if [[ -z "$libraryId" ]]; then
+    echo "Library name '$libraryArg' not found."
+    return 1
+  fi
+fi
+
+query="SELECT b.title, b.subtitle, a.lastFirst AS author, li.path, l.name AS library_name
+  FROM books b
+  JOIN bookAuthors ba ON b.id = ba.bookId
+  JOIN authors a ON ba.authorId = a.id
+  JOIN libraryItems li ON b.id = li.mediaId
+  JOIN libraries l ON li.libraryId = l.id
+  WHERE li.libraryId = '$libraryId'
+  ORDER BY RANDOM()
+  LIMIT $limit;"
+
+random_books=$(sqlite3 "$db" "$query")
+
+if [ -n "$random_books" ]; then
+  IFS=$'\n'
+  for book in $random_books; do
+    IFS="|" read -r title subtitle author path library_name <<< "$book"
+    echo "Title: $title: $subtitle"
+    echo "Author: $author"
+    echo "Path: $path"
+    echo "Library: $library_name"
+    echo ""
+  done
+else
+  echo "No books found in the specified library."
+fi

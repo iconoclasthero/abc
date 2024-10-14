@@ -98,14 +98,6 @@ get_library_items() {
     fi
 }
 
-
-
-
-
-
-
-
-
 update_explicit_flag() {
     local item_id="$1"
     abs_endpoint="/api/items/$item_id/media"
@@ -122,10 +114,6 @@ update_explicit_flag() {
         echo "Failed to update item: $item_id"
     fi
 }
-
-
-
-
 
 [[ "$1" == @(edit|e|-e) ]] && editscript
 
