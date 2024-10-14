@@ -9,33 +9,32 @@ editscript(){
 pause(){ read -rp "$*" < /dev/tty; }
 
 unset libraryArg
-db="/library/books/.share/abs/config/absdatabase.sqlite"
-limit=1  # Default to 1 if no argument is provided
-
-. ~/.config/abc.conf
+. ~/.config/abc.conf # defines "$default_library" & "$abs_sqlite" among other things...
+limit=1
+db="$abs_sqlite"
 
 libraryId="${default_library#uuid: }"
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
-    --library=*) 
-        libraryArg="${1#*=}" 
+    --library=*)
+        libraryArg="${1#*=}"
         ;;
     --library)
-        # Run abs.getlibraries and get the last library UUID
+        # if no argument is given with --library then run abs.getlibraries for user selection
         libraryId=$(abs.getlibraries | tail -n2 | head -n1 | sed 's/uuid: //')
-        echo "Using library ID: $libraryId"  # Optional: Inform the user
+        echo "Using library ID: $libraryId"
         ;;
-    *) 
-        limit="$1"  # Assume this is the limit if it's not an option
+    *)
+        limit="$1"
         ;;
   esac
   shift
 done
 
-# Check if the libraryArg is a UUID or a name
+# is libraryArg is a UUID or a name?
 if [[ "$libraryArg" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-  libraryId="$libraryArg"  # It's a UUID
+  libraryId="$libraryArg"
 elif [[ -n "$libraryArg" ]]; then
   libraryId=$(sqlite3 "$db" "SELECT id FROM libraries WHERE name = '$libraryArg';")
   if [[ -z "$libraryId" ]]; then
