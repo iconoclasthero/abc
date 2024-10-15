@@ -28,7 +28,18 @@ while [[ "$#" -gt 0 ]]; do
         genre="${1#*=}"
         ;;
     --genre)  # if no argument, provide listing of genres with > 2 entries
-        sqlite3 /library/books/.share/abs/config/absdatabase.sqlite "SELECT genres FROM books;" | sed 's/^\[//'|sed 's/\]$//'|tr ',' '\n'|sort|uniq -c|awk '$1 >= 2 { $1=""; print substr($0, 2) }'
+        #sqlite3 /library/books/.share/abs/config/absdatabase.sqlite "SELECT genres FROM books;" | sed 's/^\[//'|sed 's/\]$//'|tr ',' '\n'|sort|uniq -c|awk '$1 >= 2 { $1=""; print substr($0, 2) }'
+        genre="$(sqlite3 "$db" "SELECT genres FROM books;" | sed 's/^\[//'|sed 's/\]$//'|tr ',' '\n'|sort|uniq -c|awk '$1 >= 2 { $1=""; print substr($0, 2) }'|gum choose)"
+        [[ "$genre" =~ ^\" ]] && genre="${genre#\"}"
+        [[ "$genre" =~ \"$ ]] && genre="${genre%\"}"
+        ;;
+    --tag=*)
+        tag="${1#*=}"
+        ;;
+    --tag)  # if no argument, provide listing of genres with > 2 entries
+        tag="$(sqlite3 "$db" "SELECT tags FROM books;" | sed 's/^\[//'|sed 's/\]$//'|tr ',' '\n'|sort|uniq -c|awk '$1 >= 2 { $1=""; print substr($0, 2) }'|gum choose)"
+          [[ "$tag" =~ ^\" ]] && tag="${tag#\"}"
+          [[ "$tag" =~ \"$ ]] && tag="${tag%\"}"
         ;;
     *)
         limit="$1"
