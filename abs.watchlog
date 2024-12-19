@@ -79,10 +79,10 @@ if [[ ${flag_ignore} = true ]] ; then
 
 pause "$ignores"
 
-tail -n "$numout" -f "$abs_logpath" | grep -Evi "$ignores" | colorize_log
+tail -n "$numout" -F "$abs_logpath" | grep -Evi "$ignores" | colorize_log
 
 else
-tail -n "$numout" -f "$abs_logpath" | colorize_log
+tail -n "$numout" -F "$abs_logpath" | colorize_log
 
 fi
 

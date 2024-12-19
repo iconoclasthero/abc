@@ -1,10 +1,7 @@
 #!/bin/bash
-#set -x
-#trap read debug
-#!/bin/bash
-# init
 
-newuser=bvargo
+#newuser= is defined in the following
+. /etc/default/absown
 shopt -s extglob
 shopt -s dotglob
 scriptname="$(realpath $0)"
