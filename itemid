@@ -1,0 +1,16 @@
+#!/bin/bash
+# nb: the swp file that editscript relies on is provided by nano
+. ~/.config/indexopus.conf
+editscript(){
+  local scriptpath script path swp; scriptpath=$(realpath "$0" 2>/dev/null); script="${scriptpath##*/}"; path="${scriptpath%/*}"; swp="$path/.$script.swp"
+     [[ ! -e "$swp" ]] && printf "\n\n%s\n\n" "$swp" && (/usr/bin/nano "$scriptpath") && exit
+     printf "\n%s is already being edited.\n%s exists; try fg or look in another window.\n" "$scriptpath" "$swp"; exit ;}
+
+pause(){ read -rp "$*" ; }
+
+[[ "$1" == @(edit|e|nano|-e|-E) ]] && editscript
+
+sqlitepwd="${PWD//\'/\'\'}"
+itemid="$(sqlite3 "$abssqlite" "select id FROM libraryitems WHERE path=='$sqlitepwd';" ".exit")"
+
+echo "$itemid"
